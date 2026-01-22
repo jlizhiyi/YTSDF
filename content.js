@@ -1,3 +1,4 @@
+console.log('YTSDF: Content script loaded!');
 let lastUrl = location.href;
 
 // Inject floating menu UI
@@ -80,7 +81,7 @@ function injectUI() {
   
   // Close when clicking outside
   document.addEventListener('click', (e) => {
-    if (!overlay.contains(e.target) && e.target !== toggleBtn) {
+    if (!overlay.contains(e.target) && !toggleBtn.contains(e.target)) {
       overlay.classList.remove('visible');
     }
   });
@@ -240,8 +241,10 @@ function restoreSearchBar(exactSearch) {
                   || document.querySelector('input[name="search_query"]')
                   || document.querySelector('ytd-searchbox input');
   } else if (location.hostname.includes('google.com')) {
-    searchInput = document.querySelector('input[name="q"]')
-                  || document.querySelector('textarea[name="q"]')
+    // Find the VISIBLE search box, not the hidden input
+    searchInput = document.querySelector('textarea[name="q"]:not([type="hidden"])')
+                  || document.querySelector('input[name="q"]:not([type="hidden"])')
+                  || document.querySelector('textarea[aria-label*="Search"]')
                   || document.querySelector('input[aria-label*="Search"]');
   }
   
@@ -260,12 +263,22 @@ function restoreSearchBar(exactSearch) {
   
   currentValue = currentValue.trim();
   
-  // Set value using native setter
-  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-  nativeInputValueSetter.call(searchInput, currentValue);
+  // Set value using the appropriate prototype based on element type
+  const isTextarea = searchInput.tagName.toLowerCase() === 'textarea';
+  const prototype = isTextarea ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+  const nativeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
+  nativeValueSetter.call(searchInput, currentValue);
   
+  // Trigger multiple events
   searchInput.dispatchEvent(new Event('input', { bubbles: true }));
   searchInput.dispatchEvent(new Event('change', { bubbles: true }));
+  searchInput.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+  
+  // For Google, trigger focus to make sure it updates
+  if (location.hostname.includes('google.com')) {
+    searchInput.focus();
+    searchInput.blur();
+  }
 }
 
 // Initialize with delays to ensure APIs are ready
