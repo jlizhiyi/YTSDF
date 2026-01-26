@@ -85,6 +85,62 @@
     margin: 15px 0 !important;
 }
 
+#ytsdf-overlay .date-row {
+    display: flex !important;
+    gap: 8px !important;
+    align-items: center !important;
+    margin-top: 5px !important;
+}
+
+#ytsdf-overlay .date-row input[type="date"] {
+    flex: 1 !important;
+    margin-top: 0 !important;
+}
+
+#ytsdf-overlay .today-btn {
+    padding: 8px 12px !important;
+    background: linear-gradient(to bottom, #ff4d5e 0%, #c82333 100%) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    transition: background 0.2s ease !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    flex: 0 0 auto !important;
+    min-width: 50px !important;
+}
+
+#ytsdf-overlay .today-btn:hover {
+    background: linear-gradient(to bottom, #45a049 0%, #2d7a2f 100%) !important;
+}
+
+#ytsdf-overlay .clear-btn {
+    padding: 8px 12px !important;
+    background: linear-gradient(to bottom, #888888 0%, #666666 100%) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    transition: background 0.2s ease !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    flex: 0 0 auto !important;
+    min-width: 50px !important;
+}
+
+#ytsdf-overlay .clear-btn:hover {
+    background: linear-gradient(to bottom, #666666 0%, #444444 100%) !important;
+}
+
+#ytsdf-overlay .clear-btn-wide {
+    min-width: 116px !important;
+}
+
 #ytsdf-overlay .sort-options {
     margin: 15px 0 !important;
     padding: 10px !important;

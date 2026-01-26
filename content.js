@@ -25,8 +25,21 @@ function injectUI() {
     </label>
     <div class="date-input">
       <label>
+        Filter results after:
+        <div class="date-row">
+          <input type="date" id="ytsdf-afterDate">
+          <button class="clear-btn clear-btn-wide" data-target="ytsdf-afterDate">Clear</button>
+        </div>
+      </label>
+    </div>
+    <div class="date-input">
+      <label>
         Filter results before:
-        <input type="date" id="ytsdf-cutoffDate">
+        <div class="date-row">
+          <input type="date" id="ytsdf-cutoffDate">
+          <button class="today-btn" data-target="ytsdf-cutoffDate">Today</button>
+          <button class="clear-btn" data-target="ytsdf-cutoffDate">Clear</button>
+        </div>
       </label>
     </div>
     <div class="sort-options">
@@ -51,16 +64,17 @@ function injectUI() {
   
   // Load saved settings with error handling
   try {
-    chrome.storage.sync.get(['enabled', 'exactSearch', 'cutoffDate', 'sortOrder'], (data) => {
+    chrome.storage.sync.get(['enabled', 'exactSearch', 'cutoffDate', 'afterDate', 'sortOrder'], (data) => {
       if (chrome.runtime.lastError) {
         console.error('YTSDF: Error loading settings:', chrome.runtime.lastError);
         return;
       }
-      
+
       document.getElementById('ytsdf-enabled').checked = data.enabled || false;
       document.getElementById('ytsdf-exactSearch').checked = data.exactSearch || false;
       document.getElementById('ytsdf-cutoffDate').value = data.cutoffDate || '';
-      
+      document.getElementById('ytsdf-afterDate').value = data.afterDate || '';
+
       const sortOrder = data.sortOrder || 'relevance';
       const radio = document.querySelector(`input[name="ytsdf-sortOrder"][value="${sortOrder}"]`);
       if (radio) radio.checked = true;
@@ -85,26 +99,53 @@ function injectUI() {
       overlay.classList.remove('visible');
     }
   });
+
+  // Today buttons
+  document.querySelectorAll('.today-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const targetId = btn.getAttribute('data-target');
+      const targetInput = document.getElementById(targetId);
+      if (targetInput) {
+        const today = new Date().toISOString().split('T')[0];
+        targetInput.value = today;
+      }
+    });
+  });
+
+  // Clear buttons
+  document.querySelectorAll('.clear-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const targetId = btn.getAttribute('data-target');
+      const targetInput = document.getElementById(targetId);
+      if (targetInput) {
+        targetInput.value = '';
+      }
+    });
+  });
   
   // Save button
   document.getElementById('ytsdf-save').addEventListener('click', () => {
     const enabled = document.getElementById('ytsdf-enabled').checked;
     const exactSearch = document.getElementById('ytsdf-exactSearch').checked;
     const date = document.getElementById('ytsdf-cutoffDate').value;
+    const afterDate = document.getElementById('ytsdf-afterDate').value;
     const sortOrder = document.querySelector('input[name="ytsdf-sortOrder"]:checked').value;
-    
+
     try {
-      chrome.storage.sync.set({ 
-        enabled, 
+      chrome.storage.sync.set({
+        enabled,
         exactSearch,
         cutoffDate: date,
+        afterDate: afterDate,
         sortOrder
       }, () => {
         if (chrome.runtime.lastError) {
           console.error('YTSDF: Error saving settings:', chrome.runtime.lastError);
           return;
         }
-        
+
         // Show confirmation
         const originalText = document.getElementById('ytsdf-save').textContent;
         document.getElementById('ytsdf-save').textContent = 'Saved! ✓';
@@ -133,19 +174,19 @@ function injectUI() {
 
 function modifySearch() {
   try {
-    chrome.storage.sync.get(['enabled', 'exactSearch', 'cutoffDate', 'sortOrder'], (data) => {
+    chrome.storage.sync.get(['enabled', 'exactSearch', 'cutoffDate', 'afterDate', 'sortOrder'], (data) => {
       if (chrome.runtime.lastError) {
         console.error('YTSDF: Error in modifySearch:', chrome.runtime.lastError);
         return;
       }
-      
-      if (!data.enabled || !data.cutoffDate) return;
-      
+
+      if (!data.enabled || (!data.cutoffDate && !data.afterDate)) return;
+
       const url = new URL(window.location.href);
-      
+
       let queryParam = null;
       let query = null;
-      
+
       if (url.hostname.includes('google.com')) {
         queryParam = 'q';
         query = url.searchParams.get('q');
@@ -153,18 +194,26 @@ function modifySearch() {
         queryParam = 'search_query';
         query = url.searchParams.get('search_query');
       }
-      
-      if (query && queryParam && !query.includes('before:')) {
+
+      if (query && queryParam && !query.includes('before:') && !query.includes('after:')) {
         let newQuery = query;
-        
+
         if (data.exactSearch && !newQuery.startsWith('"')) {
           newQuery = `"${newQuery}"`;
         }
-        
-        newQuery = `before:${data.cutoffDate} ${newQuery}`;
-        
+
+        let dateFilters = '';
+        if (data.afterDate) {
+          dateFilters += `after:${data.afterDate} `;
+        }
+        if (data.cutoffDate) {
+          dateFilters += `before:${data.cutoffDate} `;
+        }
+
+        newQuery = `${dateFilters}${newQuery}`;
+
         url.searchParams.set(queryParam, newQuery);
-        
+
         if (url.hostname.includes('youtube.com') && data.sortOrder && data.sortOrder !== 'relevance') {
           if (data.sortOrder === 'date') {
             url.searchParams.set('sp', 'CAI%3D');
@@ -172,7 +221,7 @@ function modifySearch() {
             url.searchParams.set('sp', 'CAM%3D');
           }
         }
-        
+
         window.location.replace(url.toString());
       }
     });
@@ -183,32 +232,40 @@ function modifySearch() {
 
 function interceptYouTubeSearch() {
   try {
-    chrome.storage.sync.get(['enabled', 'exactSearch', 'cutoffDate', 'sortOrder'], (data) => {
+    chrome.storage.sync.get(['enabled', 'exactSearch', 'cutoffDate', 'afterDate', 'sortOrder'], (data) => {
       if (chrome.runtime.lastError) {
         console.error('YTSDF: Error in interceptYouTubeSearch:', chrome.runtime.lastError);
         return;
       }
-      
-      if (!data.enabled || !data.cutoffDate) return;
-      
+
+      if (!data.enabled || (!data.cutoffDate && !data.afterDate)) return;
+
       const checkSearchBox = setInterval(() => {
         const searchBox = document.querySelector('input#search');
         if (searchBox) {
           clearInterval(checkSearchBox);
-          
+
           const form = searchBox.closest('form');
           if (form) {
             form.addEventListener('submit', (e) => {
               let currentQuery = searchBox.value;
-              if (currentQuery && !currentQuery.includes('before:')) {
+              if (currentQuery && !currentQuery.includes('before:') && !currentQuery.includes('after:')) {
                 e.preventDefault();
-                
+
                 if (data.exactSearch && !currentQuery.startsWith('"')) {
                   currentQuery = `"${currentQuery}"`;
                 }
-                
-                searchBox.value = `before:${data.cutoffDate} ${currentQuery}`;
-                
+
+                let dateFilters = '';
+                if (data.afterDate) {
+                  dateFilters += `after:${data.afterDate} `;
+                }
+                if (data.cutoffDate) {
+                  dateFilters += `before:${data.cutoffDate} `;
+                }
+
+                searchBox.value = `${dateFilters}${currentQuery}`;
+
                 if (data.sortOrder && data.sortOrder !== 'relevance') {
                   const formAction = new URL(form.action);
                   if (data.sortOrder === 'date') {
@@ -218,14 +275,14 @@ function interceptYouTubeSearch() {
                   }
                   form.action = formAction.toString();
                 }
-                
+
                 form.submit();
               }
             });
           }
         }
       }, 100);
-      
+
       setTimeout(() => clearInterval(checkSearchBox), 5000);
     });
   } catch (error) {
@@ -235,9 +292,9 @@ function interceptYouTubeSearch() {
 
 function restoreSearchBar(exactSearch) {
   let searchInput = null;
-  
+
   if (location.hostname.includes('youtube.com')) {
-    searchInput = document.querySelector('input#search') 
+    searchInput = document.querySelector('input#search')
                   || document.querySelector('input[name="search_query"]')
                   || document.querySelector('ytd-searchbox input');
   } else if (location.hostname.includes('google.com')) {
@@ -247,33 +304,37 @@ function restoreSearchBar(exactSearch) {
                   || document.querySelector('textarea[aria-label*="Search"]')
                   || document.querySelector('input[aria-label*="Search"]');
   }
-  
+
   if (!searchInput) return;
-  
+
   let currentValue = searchInput.value;
-  
+
   // Remove any before:YYYY-MM-DD pattern
   const beforePattern = /before:\d{4}-\d{2}-\d{2}\s+/gi;
   currentValue = currentValue.replace(beforePattern, '');
-  
+
+  // Remove any after:YYYY-MM-DD pattern
+  const afterPattern = /after:\d{4}-\d{2}-\d{2}\s+/gi;
+  currentValue = currentValue.replace(afterPattern, '');
+
   // Remove quotes if exact search was enabled
   if (exactSearch && currentValue.startsWith('"') && currentValue.endsWith('"')) {
     currentValue = currentValue.slice(1, -1);
   }
-  
+
   currentValue = currentValue.trim();
-  
+
   // Set value using the appropriate prototype based on element type
   const isTextarea = searchInput.tagName.toLowerCase() === 'textarea';
   const prototype = isTextarea ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
   const nativeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
   nativeValueSetter.call(searchInput, currentValue);
-  
+
   // Trigger multiple events
   searchInput.dispatchEvent(new Event('input', { bubbles: true }));
   searchInput.dispatchEvent(new Event('change', { bubbles: true }));
   searchInput.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
-  
+
   // For Google, trigger focus to make sure it updates
   if (location.hostname.includes('google.com')) {
     searchInput.focus();
